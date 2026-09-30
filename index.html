@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f0b1e">
+<title>Karaokê da Família — QR e baixa latência</title>
+<style>
+:root{--bg:#0f0b1e;--card:#1c1636;--fg:#f4f1ff;--mut:#aaa2c9;--acc:#ff4fa3;--ok:#3ddc97;--warn:#ffc857;--bad:#ff6b6b;box-sizing:border-box;color-scheme:dark}
+*,*:before,*:after{box-sizing:inherit}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}main{max-width:780px;margin:auto;padding:calc(12px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom))}h1{font-size:25px;margin:5px 0 12px}h2{font-size:18px;margin:18px 0 8px}.card{background:var(--card);border-radius:14px;padding:14px;margin:10px 0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.row{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap}.stack{display:grid;gap:8px}.mut{color:var(--mut);font-size:14px}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}button,select,input,textarea{font:inherit}button{color:#fff;background:var(--acc);border:0;border-radius:10px;padding:12px 15px;margin:3px 3px 3px 0;cursor:pointer}button.alt{background:#3a3160}button.danger{background:#722f45}button:disabled{opacity:.45}input,textarea,select{width:100%;color:var(--fg);background:#120e26;border:1px solid #4b416f;border-radius:10px;padding:11px;margin:4px 0}textarea{height:86px;font-size:12px;word-break:break-all}.big{display:block;width:100%;text-align:left;padding:18px}#player{width:100%;aspect-ratio:16/9;border:0;border-radius:12px;background:#000}ol{padding-left:22px;margin:7px 0}.peer{display:grid;grid-template-columns:minmax(100px,1fr) 120px auto;gap:8px;align-items:center}.peer input{margin:0}.diag{white-space:pre-wrap;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}.pill{display:inline-block;padding:3px 8px;border-radius:999px;background:#302650;font-size:12px}.qr img{display:block;width:100%;max-width:430px;margin:auto;background:#fff;padding:12px;border-radius:12px;image-rendering:pixelated}.check{display:flex;gap:9px;align-items:flex-start}.check input{width:auto;margin-top:5px}details{margin-top:10px}summary{cursor:pointer}#scan{position:fixed;inset:0;background:#050505;z-index:20;padding:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}#scan[hidden]{display:none}#scan video{width:min(100%,760px);max-height:72vh;border-radius:12px}#toast{position:fixed;z-index:30;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#050505;padding:11px 17px;border-radius:22px;opacity:0;transition:.25s;pointer-events:none;max-width:90%;text-align:center}.tinybtn{padding:5px 8px;font-size:12px}@media(max-width:600px){.grid{grid-template-columns:1fr}.peer{grid-template-columns:1fr 110px}.peer button{grid-column:1/-1}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+</head>
+<body><main>
+<h1>🎤 Karaokê da Família</h1>
+<section id="home">
+<p class="mut">Os celulares viram microfones. A conexão é direta por WebRTC; o QR serve apenas para parear.</p>
+<button class="big" onclick="startHost()">📺 <b>Sou a TV / receptor</b><br><span class="mut">Abra no aparelho que reproduzirá o som dos microfones</span></button>
+<button class="big alt" onclick="show('guest')">📱 <b>Sou um celular</b><br><span class="mut">Usar como microfone e escolher músicas</span></button>
+</section>
+
+<section id="host" hidden>
+<div class="card">
+<iframe id="player" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; fullscreen" allowfullscreen hidden></iframe>
+<div id="now" class="mut">Nenhuma música tocando.</div>
+<div><a id="ytlink" hidden target="_blank" rel="noopener" style="color:var(--acc)">▶ Abrir vídeo no YouTube</a></div>
+<button onclick="next()">⏭ Próxima</button><button class="alt" onclick="newPhone()">＋ Conectar celular</button>
+</div>
+
+<div id="pair" class="card" hidden>
+<b>1) No celular, toque em “Escanear QR da TV”</b>
+<div id="offerqr" class="qr"><span class="mut">Gerando QR…</span></div>
+<div class="mut">2) O celular mostrará outro QR. Depois toque abaixo:</div>
+<button onclick="scan(c=>{$('#ans').value=c;finish()})">📷 Escanear resposta do celular</button>
+<button class="alt" onclick="cancelPair()">Cancelar</button>
+<details><summary class="mut">Sem câmera? Usar código de texto</summary>
+<textarea id="offer" readonly onclick="this.select()"></textarea><button onclick="shareText($('#offer').value)">📤 Enviar / copiar</button>
+<b>Cole aqui a resposta do celular</b><textarea id="ans" placeholder="Cole o código de resposta"></textarea><button onclick="finish()">✅ Conectar</button>
+</details></div>
+
+<div class="card">
+<div class="row"><b>⚡ Ajuste de latência</b><span id="delaylabel" class="pill">20 ms</span></div>
+<input id="delay" type="range" min="0" max="120" step="5" value="20" oninput="setDelay(+this.value)">
+<div class="mut">Menor = menos atraso e maior risco de cortes. Comece em 20 ms; aumente se o som falhar.</div>
+<div class="row" style="margin-top:8px"><span><b>Saída dos microfones</b><br><span id="outname" class="mut">Saída padrão do aparelho</span></span><button class="alt" onclick="chooseOutput()">🔊 Escolher saída</button></div>
+</div>
+
+<h2>Celulares conectados</h2><div id="peers" class="mut">Nenhum ainda.</div>
+<div class="card"><b>Diagnóstico da conexão</b><div id="diag" class="diag mut">Aguardando microfone…</div><div class="mut">O número “buffer” mede somente a espera na rede; não inclui toda a captura e a saída da TV.</div></div>
+<h2>Fila</h2><ol id="queue" class="mut"></ol>
+</section>
+
+<section id="guest" hidden>
+<div id="g1" class="card stack">
+<label><b>1) Seu nome</b><input id="gname" placeholder="Ex.: Matheus" maxlength="30"></label>
+<label><b>2) Perfil do microfone</b><select id="profile">
+<option value="safe">Recomendado — antieco ligado</option>
+<option value="fast">Menor atraso — sem filtros</option>
+<option value="clean">Voz processada — todos os filtros</option>
+</select></label>
+<div id="profilehelp" class="mut">Bom para usar perto da TV. Tem um pouco mais de processamento.</div>
+<button onclick="scan(c=>{$('#hoff').value=c;joinHost()})">📷 Escanear QR da TV</button>
+<button class="alt" onclick="show('home')">Voltar</button>
+<details><summary class="mut">Sem câmera? Colar código de texto</summary><textarea id="hoff" placeholder="Cole aqui o código da TV"></textarea><button onclick="joinHost()">Continuar</button></details>
+</div>
+
+<div id="g2" class="card" hidden>
+<b>3) Mostre este QR para a câmera da TV</b><br><span class="mut">Na TV, toque em “Escanear resposta”. Aumente o brilho do celular.</span>
+<div id="ansqr" class="qr"><span class="mut">Gerando QR…</span></div>
+<details><summary class="mut">Sem câmera? Enviar código de texto</summary><textarea id="hans" readonly onclick="this.select()"></textarea><button onclick="shareText($('#hans').value)">📤 Enviar / copiar</button></details>
+<div class="mut">A tela mudará quando a TV concluir a conexão.</div>
+</div>
+
+<div id="g3" hidden>
+<div class="card"><div class="row"><span class="ok">● Conectado — microfone ligado</span><span id="micmode" class="pill"></span></div><div id="micsettings" class="mut"></div>
+<button id="mutebtn" class="alt" onclick="toggleMic()">🔇 Mudo</button><button class="danger" onclick="disconnectGuest()">Desconectar</button></div>
+<div class="card"><b>Escolher música</b><input id="song" placeholder="Nome da música / cantor"><button class="alt" onclick="ytSearch()">🔎 Buscar no YouTube</button><div class="mut">Abra um vídeo de karaokê, toque em Compartilhar › Copiar link e volte aqui.</div><input id="link" placeholder="Cole o link do vídeo"><button onclick="addSong()">➕ Adicionar à fila</button></div>
+<div class="card"><b>Tocando agora</b><div id="gnow" class="mut">—</div><b>Fila</b><ol id="gq" class="mut"></ol></div>
+</div>
+</section>
+</main>
+
+<div id="scan" hidden><video id="sv" playsinline muted></video><div>Aponte a câmera para o QR code</div><button class="alt" onclick="stopScanner()">Cancelar</button></div><div id="toast"></div>
+<script>
+const $=s=>document.querySelector(s);
+const ICE={iceServers:[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302']}],iceCandidatePoolSize:2,bundlePolicy:'max-bundle',rtcpMuxPolicy:'require'};
+let scannerStop=null;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const show=v=>['home','host','guest'].forEach(x=>$('#'+x).hidden=x!==v);
+function toast(t){const e=$('#toast');e.textContent=t;e.style.opacity=1;clearTimeout(e._t);e._t=setTimeout(()=>e.style.opacity=0,2700)}
+function bytesTo64(u){let s='';for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode(...u.subarray(i,i+0x8000));return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+function b64ToBytes(s){s=s.replace(/-/g,'+').replace(/_/g,'/');s+='='.repeat((4-s.length%4)%4);return Uint8Array.from(atob(s),c=>c.charCodeAt(0))}
+async function deflate(u){return new Uint8Array(await new Response(new Blob([u]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer())}
+async function inflate(u){return new Uint8Array(await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer())}
+async function pack(d){const raw=new TextEncoder().encode(JSON.stringify({v:2,t:d.type,s:d.sdp}));if('CompressionStream'in window){try{return'K2Z.'+bytesTo64(await deflate(raw))}catch(e){}}return'K2.'+bytesTo64(raw)}
+async function unpack(c){c=String(c).trim().replace(/\s/g,'');let raw;if(c.startsWith('K2Z.'))raw=await inflate(b64ToBytes(c.slice(4)));else if(c.startsWith('K2.'))raw=b64ToBytes(c.slice(3));else{const u=b64ToBytes(c);try{raw=await inflate(u)}catch(e){raw=u}}const j=JSON.parse(new TextDecoder().decode(raw));return{type:j.type||(j.t==='o'?'offer':j.t==='a'?'answer':j.t),sdp:j.sdp||j.s}}
+function qr(el,text){try{const q=qrcode(0,'L');q.addData(text);q.make();el.innerHTML=q.createImgTag(5,0,'QR code')}catch(e){el.innerHTML='<span class="bad">QR grande demais. Use o código de texto.</span>'}}
+async function scan(cb){if(typeof jsQR==='undefined')return toast('Leitor indisponível; use código de texto');let st;try{st=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}})}catch(e){return toast('Permita a câmera ou use código de texto')}const o=$('#scan'),v=$('#sv');o.hidden=false;v.srcObject=st;await v.play();const c=document.createElement('canvas'),x=c.getContext('2d',{willReadFrequently:true});let active=true;scannerStop=()=>{active=false;st.getTracks().forEach(t=>t.stop());v.srcObject=null;o.hidden=true;scannerStop=null};(function tick(){if(!active)return;if(v.videoWidth){c.width=v.videoWidth;c.height=v.videoHeight;x.drawImage(v,0,0);const r=jsQR(x.getImageData(0,0,c.width,c.height).data,c.width,c.height,{inversionAttempts:'attemptBoth'});if(r?.data){scannerStop();navigator.vibrate?.(80);return cb(r.data)}}requestAnimationFrame(tick)})()}
+function stopScanner(){scannerStop?.()}
+async function shareText(t){if(navigator.share){try{return await navigator.share({text:t})}catch(e){}}try{await navigator.clipboard.writeText(t);toast('Código copiado!')}catch(e){toast('Selecione o código e copie')};}
+function gather(pc,timeout=8000){return new Promise(r=>{if(pc.iceGatheringState==='complete')return r();let done=false;const end=()=>{if(done)return;done=true;pc.removeEventListener('icegatheringstatechange',f);r()};const f=()=>pc.iceGatheringState==='complete'&&end();pc.addEventListener('icegatheringstatechange',f);setTimeout(end,timeout)})}
+function ytId(u){u=String(u).trim();const m=u.match(/(?:v=|youtu\.be\/|embed\/|shorts\/|live\/)([\w-]{11})/);return m?m[1]:/^[\w-]{11}$/.test(u)?u:null}
+function preferOpus(tr){try{const c=RTCRtpReceiver.getCapabilities('audio').codecs;tr.setCodecPreferences([...c.filter(x=>x.mimeType.toLowerCase()==='audio/opus'),...c.filter(x=>x.mimeType.toLowerCase()!=='audio/opus')])}catch(e){}}
+
+let queue=[],now=null,peers=[],cur=null,sinkId='',diagTimer=null;
+function startHost(){show('host');newPhone();startDiagnostics()}
+function bcast(){const m=JSON.stringify({t:'q',now:now&&{title:now.title,by:now.by},queue:queue.map(q=>({title:q.title,by:q.by}))});for(const p of peers)if(p.dc?.readyState==='open')try{p.dc.send(m)}catch(e){}renderHost()}
+function next(){now=queue.shift()||null;const f=$('#player'),l=$('#ytlink');if(now){f.hidden=false;const origin=location.origin&&location.origin!=='null'?'&origin='+encodeURIComponent(location.origin):'';f.src='https://www.youtube-nocookie.com/embed/'+now.id+'?autoplay=1&enablejsapi=1&rel=0&playsinline=1'+origin;l.hidden=false;l.href='https://www.youtube.com/watch?v='+now.id}else{f.hidden=true;f.src='about:blank';l.hidden=true}bcast()}
+function addSongHost(i){queue.push(i);toast('➕ '+i.title);now?bcast():next()}
+function removeQueue(i){queue.splice(i,1);bcast()}
+$('#player').onload=e=>{try{e.target.contentWindow.postMessage('{"event":"listening","id":1}','*')}catch(x){}};
+let ended=0;addEventListener('message',e=>{if(e.source!==$('#player').contentWindow)return;let d;try{d=JSON.parse(e.data)}catch(x){return}const fin=(d.event==='onStateChange'&&d.info===0)||(d.event==='infoDelivery'&&d.info?.playerState===0);if(fin&&Date.now()-ended>3000){ended=Date.now();next()}});
+function renderHost(){ $('#now').innerHTML=now?'🎶 <b>'+esc(now.title)+'</b> — '+esc(now.by):'Nenhuma música tocando.';$('#queue').innerHTML=queue.map((q,i)=>'<li>'+esc(q.title)+' <span class="mut">('+esc(q.by)+')</span> <button class="tinybtn danger" onclick="removeQueue('+i+')">remover</button></li>').join('')||'<span class="mut">Vazia</span>';const on=peers.filter(p=>p.pc.connectionState==='connected');$('#peers').innerHTML=on.length?'':'Nenhum ainda.';for(const p of on){const d=document.createElement('div');d.className='peer card';d.innerHTML='<span>📱 '+esc(p.name)+'</span><input aria-label="Volume" type="range" min="0" max="1" step=".05" value="'+p.vol+'"><button class="tinybtn danger">Desconectar</button>';d.querySelector('input').oninput=e=>{p.vol=+e.target.value;if(p.audio)p.audio.volume=p.vol};d.querySelector('button').onclick=()=>closePeer(p);$('#peers').append(d)}}
+function closePeer(p){try{p.dc?.close();p.pc?.close();p.audio?.remove()}catch(e){}peers=peers.filter(x=>x!==p);renderHost()}
+function applyDelay(p){const ms=+$('#delay').value;try{if('jitterBufferTarget'in p.receiver)p.receiver.jitterBufferTarget=ms;if('playoutDelayHint'in p.receiver)p.receiver.playoutDelayHint=ms/1000}catch(e){}}
+function setDelay(ms){$('#delaylabel').textContent=ms+' ms';peers.forEach(applyDelay)}
+async function attachAudio(p,e){p.receiver=e.receiver;applyDelay(p);const s=e.streams[0]||new MediaStream([e.track]);const a=document.createElement('audio');a.autoplay=true;a.playsInline=true;a.srcObject=s;a.volume=p.vol;a.style.display='none';document.body.append(a);p.audio=a;if(sinkId&&a.setSinkId)try{await a.setSinkId(sinkId)}catch(x){}try{await a.play()}catch(x){toast('Toque na tela para liberar o áudio')}}
+async function newPhone(){if(cur&&cur.pc.connectionState==='new')closePeer(cur);const p={name:'Celular',pc:new RTCPeerConnection(ICE),vol:1,prev:null};cur=p;peers.push(p);p.dc=p.pc.createDataChannel('karaoke',{ordered:true});const tr=p.pc.addTransceiver('audio',{direction:'recvonly'});preferOpus(tr);p.pc.ontrack=e=>attachAudio(p,e);p.dc.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(x){return}if(m.t==='hi'){p.name=String(m.name||'Convidado').slice(0,30);renderHost();bcast()}if(m.t==='add'){const id=ytId(m.link);if(id)addSongHost({id,title:String(m.title||'Música').slice(0,80),by:p.name})}};p.pc.onconnectionstatechange=()=>{const s=p.pc.connectionState;if(s==='connected'){toast('📱 '+p.name+' conectado!');if(cur===p)$('#pair').hidden=true;renderHost();bcast()}if(['failed','closed'].includes(s))closePeer(p)};$('#pair').hidden=false;$('#offer').value='Gerando código…';$('#offerqr').innerHTML='<span class="mut">Gerando QR…</span>';$('#ans').value='';try{await p.pc.setLocalDescription(await p.pc.createOffer());await gather(p.pc);const c=await pack(p.pc.localDescription);$('#offer').value=c;qr($('#offerqr'),c)}catch(e){toast('Falha ao gerar conexão');closePeer(p)}}
+async function finish(){if(!cur)return toast('Gere uma conexão primeiro');try{await cur.pc.setRemoteDescription(await unpack($('#ans').value));toast('Resposta aceita; conectando…')}catch(e){toast('Código inválido ou QR incompleto')}}
+function cancelPair(){if(cur&&cur.pc.connectionState==='new')closePeer(cur);$('#pair').hidden=true}
+async function chooseOutput(){if(!HTMLMediaElement.prototype.setSinkId)return toast('Este navegador não permite escolher a saída');try{let d;if(navigator.mediaDevices.selectAudioOutput)d=await navigator.mediaDevices.selectAudioOutput();else{const list=(await navigator.mediaDevices.enumerateDevices()).filter(x=>x.kind==='audiooutput');if(!list.length)return toast('Nenhuma saída encontrada');d=list[0];toast('O navegador só liberou a saída padrão')}sinkId=d.deviceId;$('#outname').textContent=d.label||'Saída escolhida';for(const p of peers)if(p.audio?.setSinkId)await p.audio.setSinkId(sinkId)}catch(e){toast('Saída não alterada')}}
+async function startDiagnostics(){clearInterval(diagTimer);diagTimer=setInterval(async()=>{const lines=[];for(const p of peers){if(p.pc.connectionState!=='connected')continue;try{const st=await p.pc.getStats();let a,pair,lc,rc;st.forEach(r=>{if(r.type==='inbound-rtp'&&(r.kind==='audio'||r.mediaType==='audio'))a=r;if(r.type==='candidate-pair'&&r.state==='succeeded'&&r.nominated)pair=r});if(pair){lc=st.get(pair.localCandidateId);rc=st.get(pair.remoteCandidateId)}let buf='—',loss='—';if(a){if(p.prev&&a.jitterBufferEmittedCount>p.prev.c)buf=Math.round((a.jitterBufferDelay-p.prev.d)/(a.jitterBufferEmittedCount-p.prev.c)*1000)+' ms';loss=(a.packetsLost||0)-(p.prev?.l||0);p.prev={d:a.jitterBufferDelay||0,c:a.jitterBufferEmittedCount||0,l:a.packetsLost||0}}const rtt=pair?.currentRoundTripTime!=null?Math.round(pair.currentRoundTripTime*1000)+' ms':'—';const route=lc&&rc?(lc.candidateType+'→'+rc.candidateType+' '+(pair.protocol||lc.protocol||'')):'—';lines.push(`${p.name}: RTT ${rtt} | buffer ${buf} | perdas +${loss} | ${route}`)}catch(e){}}$('#diag').textContent=lines.join('\n')||'Aguardando microfone…'},2000)}
+
+let gpc=null,gdc=null,mic=null,wakeLock=null;
+$('#profile').onchange=()=>{$('#profilehelp').textContent={safe:'Bom para usar perto da TV. Tem um pouco mais de processamento.',fast:'Menor atraso. Afaste o celular das caixas para evitar microfonia.',clean:'Reduz ruído e ajusta o volume, mas tende a processar mais.'}[$('#profile').value]};
+function micConstraints(mode){const base={channelCount:{ideal:1},sampleRate:{ideal:48000},sampleSize:{ideal:16},latency:{ideal:.01}};if(mode==='fast')return{...base,echoCancellation:false,noiseSuppression:false,autoGainControl:false};if(mode==='clean')return{...base,echoCancellation:true,noiseSuppression:true,autoGainControl:true};return{...base,echoCancellation:true,noiseSuppression:false,autoGainControl:false}}
+async function keepAwake(){try{wakeLock=await navigator.wakeLock?.request('screen')}catch(e){}}
+addEventListener('visibilitychange',()=>{if(!document.hidden&&gpc?.connectionState==='connected')keepAwake()});
+async function joinHost(){let off;try{off=await unpack($('#hoff').value)}catch(e){return toast('Código da TV inválido')}const name=$('#gname').value.trim()||'Convidado',mode=$('#profile').value;let st;try{st=await navigator.mediaDevices.getUserMedia({audio:micConstraints(mode),video:false})}catch(e){return toast('Permita o uso do microfone')}mic=st.getAudioTracks()[0];try{mic.contentHint=mode==='fast'?'music':'speech'}catch(e){}gpc=new RTCPeerConnection(ICE);gpc.ondatachannel=e=>{gdc=e.channel;gdc.onopen=()=>{gdc.send(JSON.stringify({t:'hi',name}));keepAwake()};gdc.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(x){return}if(m.t!=='q')return;$('#gnow').innerHTML=m.now?'🎶 <b>'+esc(m.now.title)+'</b> — '+esc(m.now.by):'—';$('#gq').innerHTML=m.queue.map(q=>'<li>'+esc(q.title)+' <span class="mut">('+esc(q.by)+')</span></li>').join('')||'<span class="mut">Vazia</span>'}};gpc.onconnectionstatechange=()=>{if(gpc.connectionState==='connected'){$('#g1').hidden=$('#g2').hidden=true;$('#g3').hidden=false;showMicInfo(mode)}if(['failed','closed'].includes(gpc.connectionState)){toast('Desconectado. Faça o pareamento novamente.');resetGuestUI()}};try{await gpc.setRemoteDescription(off);const sender=gpc.addTrack(mic,st);try{const p=sender.getParameters();if(p.encodings?.length){p.encodings[0].maxBitrate=64000;p.encodings[0].priority='high';p.encodings[0].networkPriority='high';await sender.setParameters(p)}}catch(e){}$('#g1').hidden=true;$('#g2').hidden=false;$('#hans').value='Gerando código…';$('#ansqr').innerHTML='<span class="mut">Gerando QR…</span>';await gpc.setLocalDescription(await gpc.createAnswer());await gather(gpc);const c=await pack(gpc.localDescription);$('#hans').value=c;qr($('#ansqr'),c)}catch(e){st.getTracks().forEach(t=>t.stop());toast('Não foi possível responder à TV');resetGuestUI()}}
+function showMicInfo(mode){const s=mic?.getSettings?.()||{};$('#micmode').textContent={safe:'Antieco',fast:'Baixa latência',clean:'Processado'}[mode];$('#micsettings').textContent=[s.sampleRate&&s.sampleRate+' Hz',s.channelCount&&s.channelCount+' canal',s.latency!=null&&Math.round(s.latency*1000)+' ms de captura'].filter(Boolean).join(' • ')}
+function toggleMic(){if(!mic)return;mic.enabled=!mic.enabled;$('#mutebtn').textContent=mic.enabled?'🔇 Mudo':'🎤 Ligar';toast(mic.enabled?'Microfone ligado':'Microfone mudo')}
+function resetGuestUI(){$('#g3').hidden=true;$('#g2').hidden=true;$('#g1').hidden=false}
+function disconnectGuest(){try{gdc?.close();gpc?.close();mic?.stop();wakeLock?.release()}catch(e){}gpc=gdc=mic=null;resetGuestUI();toast('Desconectado')}
+function ytSearch(){const q=$('#song').value.trim();open('https://www.youtube.com/results?search_query='+encodeURIComponent(q+' karaoke'),'_blank')}
+function addSong(){const link=$('#link').value,id=ytId(link);if(!id)return toast('Link do YouTube inválido');if(gdc?.readyState!=='open')return toast('Sem conexão com a TV');gdc.send(JSON.stringify({t:'add',title:$('#song').value.trim()||'Música',link}));$('#link').value=$('#song').value='';toast('✅ Enviada para a fila')}
+addEventListener('beforeunload',()=>{peers.forEach(closePeer);try{mic?.stop()}catch(e){}});
+</script></body></html>
